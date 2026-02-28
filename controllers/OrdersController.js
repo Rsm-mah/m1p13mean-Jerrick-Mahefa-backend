@@ -149,6 +149,7 @@ exports.getUserOrders = async (req, res) => {
 exports.getRecentOrders = async (req, res) => {
   try {
     const orders = await Order.find()
+      .populate('customerId', 'name first_name')
       .sort({ createdAt: -1 })
       .limit(10)
       .lean();
@@ -158,13 +159,56 @@ exports.getRecentOrders = async (req, res) => {
         const items = await OrderItem.find({ orderId: order._id })
           .select('productName shopName quantity price attributes')
           .lean();
-        return { ...order, items };
+
+        const shopNames = Array.from(new Set((items || []).map(i => i.shopName).filter(Boolean)));
+        const shop = shopNames.length === 0 ? '' : shopNames.join(', ');
+
+        return { ...order, items, shop };
       })
     );
 
     res.json(ordersWithItems);
   } catch (err) {
     console.error(err);
+    res.status(500).json({ message: 'Erreur serveur' });
+  }
+};
+
+// Récupérer les 10 dernières commandes pour la boutique connectée (SHOP)
+exports.getRecentOrdersByShop = async (req, res) => {
+  try {
+    const shopId = req.user?.shopId;
+    if (!shopId) return res.status(400).json({ message: 'La boutique est requise' });
+
+    const shopObjectId = new mongoose.Types.ObjectId(shopId);
+
+    const agg = await OrderItem.aggregate([
+      { $match: { shopId: shopObjectId } },
+      { $group: { _id: '$orderId', lastItemDate: { $max: '$createdAt' } } },
+      { $sort: { lastItemDate: -1 } },
+      { $limit: 10 }
+    ]);
+
+    const orderIds = agg.map(a => a._id);
+
+    const orders = await Order.find({ _id: { $in: orderIds } })
+      .populate('customerId', 'name first_name')
+      .lean();
+
+    const ordered = orderIds.map(id => orders.find(o => o._id.toString() === id.toString())).filter(Boolean);
+
+    const ordersWithItems = await Promise.all(
+      ordered.map(async order => {
+        const items = await OrderItem.find({ orderId: order._id, shopId: shopObjectId })
+          .select('productName shopName quantity price attributes')
+          .lean();
+        return { ...order, items };
+      })
+    );
+
+    res.json(ordersWithItems);
+  } catch (err) {
+    console.error('Erreur récupération commandes récentes boutique:', err);
     res.status(500).json({ message: 'Erreur serveur' });
   }
 };

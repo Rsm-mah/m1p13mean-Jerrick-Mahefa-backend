@@ -9,6 +9,8 @@ router.get('/shop', authMiddleware, authorize('SHOP'), OrdersController.getOrder
 
 router.get('/recents', authMiddleware, authorize('ADMIN'), OrdersController.getRecentOrders);
 
+router.get('/recents/shop', authMiddleware, authorize('SHOP'), OrdersController.getRecentOrdersByShop);
+
 router.get('/stats', authMiddleware, authorize('ADMIN'), OrdersController.getDashboardStats);
 
 router.get('/stats/shop', authMiddleware, authorize('SHOP'), OrdersController.getShopStats);
