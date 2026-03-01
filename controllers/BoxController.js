@@ -47,6 +47,7 @@ exports.getAllBox = async (req, res) => {
       _id: box._id,
       name: box.name,
       loyer: box.loyer,
+      shopId: box.shopId ? box.shopId._id : null,
       shopName: box.shopId ? box.shopId.name : 'LIBRE'
     }));
 
