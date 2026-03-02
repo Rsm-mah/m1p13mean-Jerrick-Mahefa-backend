@@ -2,6 +2,64 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const Users = require('../models/Users');
 
+//Créer un utilisateur (ADMIN)
+exports.createUser = async (req, res) => {
+  const { name, email, password, phone, role, shopId } = req.body;
+
+  try {
+    if (!name || !email || !password || !phone || !role) {
+      return res.status(400).json({ message: 'Informations incomplètes' });
+    }
+
+    const normalizedRole = String(role).toUpperCase();
+    if (!['ADMIN', 'SHOP'].includes(normalizedRole)) {
+      return res.status(400).json({ message: 'Rôle invalide' });
+    }
+
+    if (normalizedRole === 'SHOP' && !shopId) {
+      return res.status(400).json({ message: 'Boutique requise pour un utilisateur SHOP' });
+    }
+
+    const existingName = await Users.findOne({
+      name: { $regex: `^${String(name).trim()}$`, $options: 'i' }
+    });
+    if (existingName) {
+      return res.status(400).json({ message: "Le nom d'utilisateur est déjà utilisé." });
+    }
+
+    const existingEmail = await Users.findOne({ email: String(email).trim() });
+    if (existingEmail) {
+      return res.status(400).json({ message: "L'adresse e-mail est déjà associée à un compte." });
+    }
+
+    const hashedPassword = await bcrypt.hash(String(password), 10);
+
+    const user = await Users.create({
+      name: String(name).trim(),
+      email: String(email).trim(),
+      phone: String(phone).trim(),
+      password: hashedPassword,
+      role: normalizedRole,
+      shopId: normalizedRole === 'SHOP' ? shopId : null,
+    });
+
+    res.status(201).json({
+      message: 'Utilisateur créé avec succès',
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        role: user.role,
+        shopId: user.shopId,
+      },
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Erreur lors de la création de l'utilisateur" });
+  }
+};
+
 //Supprimer un utilisateur
 exports.DeleteUser = async (req, res) => {
   const { id } = req.params;
@@ -22,8 +80,6 @@ exports.DeleteUser = async (req, res) => {
 };
 
 //Modifier le mot de passe d'un utilisateur
-// - ADMIN: reset via /update-password/:id avec { newPassword }
-// - SHOP: change son propre mot de passe via /update-password/:id avec { oldPassword, newPassword }
 exports.ChangePassword = async (req, res) => {
   const { id } = req.params;
   const { oldPassword, newPassword } = req.body;

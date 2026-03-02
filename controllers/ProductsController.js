@@ -7,13 +7,18 @@ exports.DeleteProduct = async (req, res) => {
   const { id } = req.params;
 
   try {
-    const category = await Products.findByIdAndUpdate(id,{ isDeleted: true },{ new: true });
+    const filter = { _id: id, isDeleted: false };
+    if (req.user?.role === 'SHOP') {
+      filter.shopId = req.user?.shopId;
+    }
 
-    if (!category) {
+    const product = await Products.findOneAndUpdate(filter, { isDeleted: true }, { new: true });
+
+    if (!product) {
       return res.status(404).json({message: "Ce produit n'existe pas ou n'est plus disponible."});
     }
 
-    res.status(200).json({message: "Produit supprimé avec succès",category});
+    res.status(200).json({message: "Produit supprimé avec succès", product});
 
   } catch (error) {
     console.error(error);

@@ -15,6 +15,9 @@ router.put('/:id',authMiddleware, authorize('ADMIN', 'SHOP'), UserController.Upd
 //Récupérer tous les users
 router.get('/', authMiddleware, authorize('ADMIN'), UserController.getAllUsers);
 
+//Créer un utilisateur
+router.post('/register', authMiddleware, authorize('ADMIN'), UserController.createUser);
+
 //Connexion user
 router.post('/', UserController.login);
 

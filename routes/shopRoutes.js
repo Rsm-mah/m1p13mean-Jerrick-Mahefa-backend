@@ -16,6 +16,7 @@ router.get('/', authMiddleware, authorize('ADMIN'), ShopController.getAllShops);
 router.post('/save', authMiddleware, authorize('ADMIN'), ShopController.createShop);
 
 // Créer le compte d'une boutique
+router.post('/register', authMiddleware, authorize('ADMIN'), ShopController.register);
 router.post('/', authMiddleware, authorize('ADMIN'), ShopController.register);
 
 module.exports = router;
