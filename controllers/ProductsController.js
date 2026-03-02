@@ -147,27 +147,46 @@ exports.getAllProductsByShopId = async (req, res) => {
 //Récupérer tous les produits
 exports.getAllProducts = async (req, res) => {
   try {
-    const { category, page = 1, limit = 12 } = req.query;
+    const { category, page = 1, limit = 12, search, sortPrice } = req.query;
 
     const filter = { isDeleted: false };
 
-    if (category) {
+    if (typeof category === 'string' && category.trim() && category !== 'all') {
       filter.categoryId = category;
     }
 
-    // Convertir page et limit en nombres
+    const escapeRegExp = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+    if (typeof search === 'string' && search.trim()) {
+      const trimmed = search.trim().slice(0, 80);
+      const rx = new RegExp(escapeRegExp(trimmed), 'i');
+      filter.$or = [{ name: rx }, { description: rx }];
+    }
+
     const pageNumber = parseInt(page, 10);
     const pageSize = parseInt(limit, 10);
 
-    // Savoir le nombre de pages
+    // Nombre de pages
     const totalProducts = await Products.countDocuments(filter);
+
+    let sort = { createdAt: -1 };
+
+    if (typeof sortPrice === 'string') {
+      const s = sortPrice.toLowerCase();
+      if (s === 'asc' || s === 'price_asc') {
+        sort = { 'details.price': 1, createdAt: -1 };
+      }
+      if (s === 'desc' || s === 'price_desc') {
+        sort = { 'details.price': -1, createdAt: -1 };
+      }
+    }
 
     const products = await Products.find(filter)
       .populate('shopId', 'name')
       .populate('categoryId', 'name')
       .skip((pageNumber - 1) * pageSize)
       .limit(pageSize)
-      .sort({ createdAt: -1 });
+      .sort(sort);
 
     res.status(200).json({
       products,
