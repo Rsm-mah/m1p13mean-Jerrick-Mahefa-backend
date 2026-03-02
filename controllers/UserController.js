@@ -22,31 +22,48 @@ exports.DeleteUser = async (req, res) => {
 };
 
 //Modifier le mot de passe d'un utilisateur
+// - ADMIN: reset via /update-password/:id avec { newPassword }
+// - SHOP: change son propre mot de passe via /update-password/:id avec { oldPassword, newPassword }
 exports.ChangePassword = async (req, res) => {
-  const { email, oldPassword, newPassword } = req.body;
+  const { id } = req.params;
+  const { oldPassword, newPassword } = req.body;
 
   try {
-    const user = await Users.findOne({ email, isDeleted: false });
-
-    if (!user) {
-      return res.status(404).json({message: "Utilisateur introuvable"});
+    if (!newPassword) {
+      return res.status(400).json({ message: 'Nouveau mot de passe requis' });
     }
 
-    const matchPassword = await bcrypt.compare(oldPassword, user.password);
-    if (!matchPassword) {
-      return res.status(400).json({message: "Ancien mot de passe incorrect"});
+    // SHOP ne peut changer que son propre mot de passe
+    if (req.user?.role === 'SHOP' && req.user?.id !== id) {
+      return res.status(403).json({ message: 'Accès interdit' });
+    }
+
+    const user = await Users.findOne({ _id: id, isDeleted: false });
+
+    if (!user) {
+      return res.status(404).json({ message: 'Utilisateur introuvable' });
+    }
+
+    // Si SHOP: vérifier ancien mot de passe
+    if (req.user?.role !== 'ADMIN') {
+      if (!oldPassword) {
+        return res.status(400).json({ message: 'Ancien mot de passe requis' });
+      }
+
+      const matchPassword = await bcrypt.compare(oldPassword, user.password);
+      if (!matchPassword) {
+        return res.status(400).json({ message: 'Ancien mot de passe incorrect' });
+      }
     }
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);
-
     user.password = hashedPassword;
     await user.save();
 
-    res.json({message: "Mot de passe modifié avec succès"});
-
+    res.json({ message: 'Mot de passe modifié avec succès' });
   } catch (error) {
     console.error(error);
-    res.status(500).json({message: "Erreur lors de la modification du mot de passe"});
+    res.status(500).json({ message: 'Erreur lors de la modification du mot de passe' });
   }
 };
 
@@ -55,7 +72,30 @@ exports.UpdateUser = async (req, res) => {
   const { id } = req.params;
 
   try {
-    const user = await Users.findByIdAndUpdate(id, req.body, { new: true, runValidators: true });
+    if (req.user?.role === 'SHOP' && req.user?.id !== id) {
+      return res.status(403).json({ message: 'Accès interdit' });
+    }
+
+    const adminAllowed = ['name', 'email', 'phone', 'role', 'shopId'];
+    const shopAllowed = ['name', 'email', 'phone'];
+    const allowedFields = req.user?.role === 'ADMIN' ? adminAllowed : shopAllowed;
+
+    const update = {};
+    for (const field of allowedFields) {
+      if (Object.prototype.hasOwnProperty.call(req.body, field)) {
+        update[field] = req.body[field];
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(req.body, 'password')) {
+      return res.status(400).json({ message: 'Utilisez la route update-password pour modifier le mot de passe' });
+    }
+
+    const user = await Users.findOneAndUpdate(
+      { _id: id, isDeleted: false },
+      update,
+      { new: true, runValidators: true }
+    );
 
     if (!user) {
       return res.status(404).json({message: "Utilisateur introuvable"});
@@ -72,9 +112,21 @@ exports.UpdateUser = async (req, res) => {
 //Récupérer tous les users
 exports.getAllUsers = async (req, res) => {
   try {
-    const users = await Users.find({ isDeleted: false }).select('-password');
+    const users = await Users.find({ isDeleted: false })
+      .select('-password')
+      .populate('shopId', 'name');
 
-    res.status(200).json({ users });
+    const result = users.map(u => ({
+      _id: u._id,
+      name: u.name,
+      email: u.email,
+      role: u.role,
+      phone: u.phone,
+      shopId: u.shopId ? u.shopId._id : null,
+      shopName: u.shopId ? u.shopId.name : null
+    }));
+
+    res.status(200).json({ users: result });
 
   } catch (error) {
     console.error(error);
